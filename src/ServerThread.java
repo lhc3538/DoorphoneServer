@@ -227,6 +227,7 @@ public class ServerThread implements Runnable {
                     Map.Entry<String, Socket> entry= it.next();
                     if (entry.getValue().equals(client)) {
                         it.remove();
+                        myDebug("数据清理完毕");
                     }
                 }
             }
@@ -239,6 +240,7 @@ public class ServerThread implements Runnable {
                     Map.Entry<String, Socket> entry= it.next();
                     if (entry.getValue().equals(client)) {
                         it.remove();
+                        myDebug("数据清理完毕");
                     }
                 }
             }
