@@ -32,7 +32,11 @@ public class ServerThread implements Runnable {
             in = new BufferedReader(new InputStreamReader(client.getInputStream()));
 
             //接收从客户端发送过来的数据，接收身份辨识数据
-            String str =  in.readLine();
+            String str;
+            do {
+                str =  in.readLine();
+            }while (str == null);
+            myDebug(str);
             String[] strTemp = str.split(";");
             strType = strTemp[0];
             strHomeID = strTemp[1];
@@ -44,19 +48,6 @@ public class ServerThread implements Runnable {
                 //用户移动终端发来id数据
                 case "mobile":
                     dealMobile();   //处理移动端操作
-                    break;
-                //用户移动终端发来 关闭指令
-                case "close":
-                    synchronized (this) {
-                        if (PublicData.sockHomeMap.get(strHomeID) != null) {
-                            //获取socket输出流
-                            PrintStream outTemp = new PrintStream(PublicData.sockHomeMap.get(strHomeID).getOutputStream());
-                            //通知两终端关闭对讲线程
-                            outTemp.println("close");
-                        }
-                    }
-                    out.println("close");
-                    myDebug("即将关闭");
                     break;
                 default:
                     out.println("invalid");
@@ -93,27 +84,31 @@ public class ServerThread implements Runnable {
         while(true) {
             try {
                 String str = in.readLine();
-            } catch (IOException e) {
-                e.printStackTrace();
-                //家庭端已退出
-                myDebug("家庭端异常终止");
-                //检测对应的移动端是否在线
-                synchronized (this) {
-                    existHomeID = PublicData.sockMobileMap.containsKey(strHomeID);
-                    if (existHomeID) {
-                        try {
-                            //获取socket输出流
-                            PrintStream outTemp = new PrintStream(PublicData.sockMobileMap.get(strHomeID).getOutputStream());
-                            //通知移动端关闭
-                            outTemp.println("close");
-                        } catch (IOException e1) {
-                            e1.printStackTrace();
+                //对于Linux socket的连接要这样判断异常退出
+                if (str == null) {
+                    //家庭端已退出
+                    myDebug("家庭端异常终止");
+                    //检测对应的移动端是否在线
+                    synchronized (this) {
+                        existHomeID = PublicData.sockMobileMap.containsKey(strHomeID);
+                        if (existHomeID) {
+                            try {
+                                //获取socket输出流
+                                PrintStream outTemp = new PrintStream(PublicData.sockMobileMap.get(strHomeID).getOutputStream());
+                                //通知移动端关闭
+                                outTemp.println("close");
+                            } catch (IOException e1) {
+                                e1.printStackTrace();
+                            }
                         }
                     }
+                    if (existHomeID) {
+                        //关闭udp转发线程
+                    }
+                    return;
                 }
-                if (existHomeID) {
-                    //关闭udp转发线程
-                }
+            } catch (IOException e) {
+                e.printStackTrace();
                 return;
             }
         }
@@ -183,6 +178,7 @@ public class ServerThread implements Runnable {
             if (i==65536) {
                 out.println("jam");
                 outTemp.println("jam");
+                return;
             }
         }
         else {
@@ -227,7 +223,7 @@ public class ServerThread implements Runnable {
                     Map.Entry<String, Socket> entry= it.next();
                     if (entry.getValue().equals(client)) {
                         it.remove();
-                        myDebug("数据清理完毕");
+                        myDebug("套接字已从家庭端存储结构中清除");
                     }
                 }
             }
@@ -240,7 +236,7 @@ public class ServerThread implements Runnable {
                     Map.Entry<String, Socket> entry= it.next();
                     if (entry.getValue().equals(client)) {
                         it.remove();
-                        myDebug("数据清理完毕");
+                        myDebug("套接字已从移动端存储结构中清除");
                     }
                 }
             }
