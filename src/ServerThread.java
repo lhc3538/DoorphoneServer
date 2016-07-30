@@ -102,9 +102,6 @@ public class ServerThread implements Runnable {
                             }
                         }
                     }
-                    if (existHomeID) {
-                        //关闭udp转发线程
-                    }
                     return;
                 }
             } catch (IOException e) {
@@ -119,6 +116,7 @@ public class ServerThread implements Runnable {
      *
      */
     private void dealMobile() {
+        TransmitThread transmitThread = new TransmitThread();   //udp数据传输服务
         boolean existHomeID;
         synchronized (this) {
             existHomeID = PublicData.sockMobileMap.containsKey(strHomeID);
@@ -149,7 +147,7 @@ public class ServerThread implements Runnable {
         }
         if (existHomeID) {
             //通知移动和家庭终端开启 对讲线程
-            int i;
+            int i,j;
             for (i=1026;i<65536;i++) {
                 try {
                     ServerSocket sockTemp = new ServerSocket(i);
@@ -162,24 +160,26 @@ public class ServerThread implements Runnable {
                     myDebug("移动端udp端口号分发失败");
                 }
             }
-            for (i++;i<65536;i++) {
+            for (j=i+1;j<65536;j++) {
                 try {
-                    ServerSocket sockTemp = new ServerSocket(i);
+                    ServerSocket sockTemp = new ServerSocket(j);
                     //i端口可用
-                    outTemp.println(String.valueOf(i));
+                    outTemp.println(String.valueOf(j));
                     sockTemp.close();
-                    myDebug("家庭终端udp端口号为"+String.valueOf(i));
+                    myDebug("家庭终端udp端口号为"+String.valueOf(j));
                     break;
                 }catch (IOException e) {
                     myDebug("家庭端udp端口号分发失败");
                 }
             }
             //端口全被占用
-            if (i==65536) {
+            if (j==65536) {
                 out.println("jam");
                 outTemp.println("jam");
                 return;
             }
+            //开始音视频数据传输
+            transmitThread.run(j,i);
         }
         else {
             //通知请求方，被请求端未上线
@@ -190,23 +190,26 @@ public class ServerThread implements Runnable {
         while(true) {
             try {
                 String str = in.readLine();
-            } catch (IOException e) {
-                e.printStackTrace();
-                myDebug("移动端异常终止");
-                //检测对应的家庭端是否在线
-                synchronized (this) {
-                    existHomeID = PublicData.sockHomeMap.containsKey(strHomeID);
-                    if (existHomeID) {
-                        //通知家庭端关闭
-                        if (outTemp != null) {
-                            outTemp.println("close");
+                if (str == null) {
+                    myDebug("移动端异常终止");
+                    //检测对应的家庭端是否在线
+                    synchronized (this) {
+                        existHomeID = PublicData.sockHomeMap.containsKey(strHomeID);
+                        if (existHomeID) {
+                            //通知家庭端关闭
+                            if (outTemp != null) {
+                                outTemp.println("close");
+                            }
                         }
                     }
+                    if (existHomeID) {
+                        //关闭udp转发线程
+                        transmitThread.stop();
+                    }
+                    return;
                 }
-                if (existHomeID) {
-                    //关闭udp转发线程
-                }
-                return;
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
     }
@@ -218,8 +221,7 @@ public class ServerThread implements Runnable {
         if (strType.equals("home")) {
             synchronized (this) {
                 Iterator<Map.Entry<String, Socket>> it = PublicData.sockHomeMap.entrySet().iterator();
-                while(it.hasNext())
-                {
+                while(it.hasNext()) {
                     Map.Entry<String, Socket> entry= it.next();
                     if (entry.getValue().equals(client)) {
                         it.remove();
